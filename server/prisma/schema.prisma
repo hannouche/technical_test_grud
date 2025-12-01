@@ -1,0 +1,91 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ScheduleType {
+  DAILY
+  WEEKLY
+}
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+model Campaign {
+  id                 String         @id @default(uuid())
+  name               String
+  model              String
+  context            String
+  scheduleType       ScheduleType
+  dailyEmails        Int?
+  weeklyDays         Int[]
+  weeklyEmailsPerDay Int?
+  durationDays       Int
+  startDateUtc       DateTime
+  timeZone           String
+  status             CampaignStatus @default(DRAFT)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  leads             CampaignLead[]
+  generatedEmails   GeneratedEmail[]
+}
+
+model Lead {
+  id         String         @id @default(uuid())
+  email      String
+  firstName  String?
+  lastName   String?
+  createdAt  DateTime       @default(now())
+
+  campaigns  CampaignLead[]
+}
+
+model CampaignLead {
+  id             String        @id @default(uuid())
+  campaignId     String
+  leadId         String
+  createdAt      DateTime      @default(now())
+
+  lastSentAt     DateTime?
+  // Number of emails already sent in this campaign to this lead
+  emailsSentCount Int           @default(0)
+
+  campaign       Campaign      @relation(fields: [campaignId], references: [id])
+  lead           Lead          @relation(fields: [leadId], references: [id])
+
+  sentEmails     SentEmail[]
+}
+
+model GeneratedEmail {
+  id            String      @id @default(uuid())
+  campaignId    String
+  scheduledSlot Int
+  subject       String
+  bodyHtml      String
+  createdAt     DateTime    @default(now())
+  approved      Boolean     @default(false) // for "review before sending"
+
+  campaign      Campaign    @relation(fields: [campaignId], references: [id])
+
+  @@unique([campaignId, scheduledSlot])
+}
+
+model SentEmail {
+  id             String      @id @default(uuid())
+  campaignLeadId String
+  scheduledSlot  Int         // logical slot index: 0,1,2,... for idempotency
+  sentAt         DateTime    @default(now())
+
+  campaignLead   CampaignLead @relation(fields: [campaignLeadId], references: [id])
+
+  @@unique([campaignLeadId, scheduledSlot]) // idempotency guarantee
+}
